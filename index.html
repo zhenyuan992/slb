@@ -51,11 +51,11 @@ warnings.filterwarnings('ignore')
 tp.quiet(suppress=True)  # Suppress output
 
 # Parameters - adjust as needed
-diameter = 11  # for feature finding
-minmass = 100
+diameter = 3  # for feature finding
+minmass = 10
 search_range = 5  # max displacement between frames
 memory = 3  # frames a particle can disappear
-min_track_len = 25  # min length for trajectories
+min_track_len = 5  # min length for trajectories
 mpp = 0.1  # microns per pixel
 fps = 10  # frames per second
 n_lags_fit = 5  # number of initial lags to fit for D
