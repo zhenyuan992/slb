@@ -18,11 +18,11 @@
             await pyodide.loadPackage(['numpy', 'pandas', 'scipy', 'matplotlib']);
             await pyodide.loadPackage('micropip');
             const micropip = pyodide.pyimport('micropip');
+            await micropip.install('setuptools'); // Add setuptools for distutils compatibility
             await micropip.install('nd2');
-            await micropip.install('trackpy');
+            await micropip.install('trackpy<0.7.0'); // Pin trackpy to a version compatible with Pyodide
             return pyodide;
         }
-
         let pyodideReadyPromise = loadPyodideAndPackages();
 
         async function processFile() {
