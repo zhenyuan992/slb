@@ -18,15 +18,15 @@
             await pyodide.loadPackage(['numpy', 'pandas', 'scipy', 'matplotlib']);
             await pyodide.loadPackage('micropip');
             const micropip = pyodide.pyimport('micropip');
-            await micropip.install('setuptools'); // Add setuptools for distutils compatibility
+            await micropip.install('setuptools'); // For distutils compatibility
             await micropip.install('nd2');
-            await micropip.install('trackpy<0.7.0'); // Pin trackpy to a version compatible with Pyodide
+            await micropip.install('trackpy<0.7.0'); // Pin to older, potentially more compatible version
             return pyodide;
         }
+
         let pyodideReadyPromise = loadPyodideAndPackages();
 
         async function processFile() {
-            console.log("starting imports line 29");
             let pyodide = await pyodideReadyPromise;
             let file = document.getElementById('nd2File').files[0];
             if (!file) {
@@ -40,16 +40,28 @@
 
             try {
                 let [svg, message] = await pyodide.runPythonAsync(`
-print("imports starting")
+import sys
+from types import ModuleType
+
+# Monkey-patch distutils to avoid import error
+class DistutilsModule(ModuleType):
+    def __init__(self):
+        self.version = ModuleType("version")
+        self.version.LooseVersion = lambda x: x  # Minimal stub for LooseVersion
+sys.modules['distutils'] = DistutilsModule()
+sys.modules['distutils.version'] = sys.modules['distutils'].version
+print("im line 53")
 import nd2
+print("im line 55")
 import trackpy as tp
+print("im line 57")
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 import warnings
 warnings.filterwarnings('ignore')
-print("imports done")
+print("im line 62")
 tp.quiet(suppress=True)  # Suppress output
 
 # Parameters - adjust as needed
@@ -61,7 +73,7 @@ min_track_len = 5  # min length for trajectories
 mpp = 0.1  # microns per pixel
 fps = 10  # frames per second
 n_lags_fit = 5  # number of initial lags to fit for D
-
+print("im line 74")
 # Read ND2
 f = nd2.ND2File('/input.nd2')
 frames = f.asarray()
@@ -70,14 +82,14 @@ frames = f.asarray()
 if frames.ndim == 4:
     if f.sizes.get('C', 1) > 1:
         frames = frames[:, 1, :, :]  # take first channel
-
+print("frames",len(frames))
 # Get metadata if possible
 try:
     voxel = f.voxel_size()
     mpp = voxel.x  # assume isotropic in xy
 except:
     pass
-
+print("im line 90")
 # For fps, try to compute
 try:
     events = f.events(orient='records')
@@ -89,7 +101,7 @@ except:
 
 # Locate features
 features = tp.batch(frames, diameter=diameter, minmass=minmass)
-
+print("features",len(features))
 # Link
 traj = tp.link(features, search_range=search_range, memory=memory)
 
