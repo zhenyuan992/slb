@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ND2 Particle Tracking Web App</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+</head>
+<body>
+    <h1>ND2 File Particle Tracking with Trackpy</h1>
+    <input type="file" id="nd2File" accept=".nd2">
+    <button onclick="processFile()">Process</button>
+    <div id="output"></div>
+    <div id="plot"></div>
+
+    <script>
+        async function loadPyodideAndPackages() {
+            let pyodide = await loadPyodide();
+            await pyodide.loadPackage(['numpy', 'pandas', 'scipy', 'matplotlib']);
+            await pyodide.loadPackage('micropip');
+            const micropip = pyodide.pyimport('micropip');
+            await micropip.install('nd2');
+            await micropip.install('trackpy');
+            return pyodide;
+        }
+
+        let pyodideReadyPromise = loadPyodideAndPackages();
+
+        async function processFile() {
+            let pyodide = await pyodideReadyPromise;
+            let file = document.getElementById('nd2File').files[0];
+            if (!file) {
+                alert('Please select an ND2 file.');
+                return;
+            }
+
+            let arrayBuffer = await file.arrayBuffer();
+            let bytes = new Uint8Array(arrayBuffer);
+            pyodide.FS.writeFile('/input.nd2', bytes);
+
+            try {
+                let [svg, message] = await pyodide.runPythonAsync(`
+import nd2
+import trackpy as tp
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from io import BytesIO
+import warnings
+warnings.filterwarnings('ignore')
+
+tp.quiet(suppress=True)  # Suppress output
+
+# Parameters - adjust as needed
+diameter = 11  # for feature finding
+minmass = 100
+search_range = 5  # max displacement between frames
+memory = 3  # frames a particle can disappear
+min_track_len = 25  # min length for trajectories
+mpp = 0.1  # microns per pixel
+fps = 10  # frames per second
+n_lags_fit = 5  # number of initial lags to fit for D
+
+# Read ND2
+f = nd2.ND2File('/input.nd2')
+frames = f.asarray()
+
+# Assume it's a 3D array: time, y, x (grayscale single channel)
+if frames.ndim == 4:
+    if f.sizes.get('C', 1) > 1:
+        frames = frames[:, 1, :, :]  # take first channel
+
+# Get metadata if possible
+try:
+    voxel = f.voxel_size()
+    mpp = voxel.x  # assume isotropic in xy
+except:
+    pass
+
+# For fps, try to compute
+try:
+    events = f.events(orient='records')
+    times = [e['Relative Time (s)'] for e in events]
+    dt = np.mean(np.diff(times))
+    fps = 1 / dt
+except:
+    pass
+
+# Locate features
+features = tp.batch(frames, diameter=diameter, minmass=minmass)
+
+# Link
+traj = tp.link(features, search_range=search_range, memory=memory)
+
+# Filter short tracks
+traj = tp.filter_stubs(traj, min_track_len)
+
+# Compute individual MSDs
+imsds = tp.imsd(traj, mpp=mpp, fps=fps)
+
+# Compute D for each particle
+Ds = []
+for particle in imsds.columns:
+    lags = imsds.index[1:n_lags_fit+1]
+    msds = imsds[particle].iloc[1:n_lags_fit+1]
+    if len(msds.dropna()) < 2:
+        continue
+    # Fit linear: msd = 4 * D * lag (2D)
+    slope = np.polyfit(lags, msds, 1)[0]
+    D = slope / 4
+    if D > 0:
+        Ds.append(D)
+
+if not Ds:
+    raise ValueError("No valid trajectories found.")
+
+# Plot histogram
+plt.figure()
+plt.hist(Ds, bins=20)
+plt.xlabel('Diffusion Coefficient (μm²/s)')
+plt.ylabel('Count')
+plt.title('Distribution of Diffusion Coefficients')
+
+buf = BytesIO()
+plt.savefig(buf, format='svg')
+buf.seek(0)
+svg = buf.read().decode('utf-8')
+plt.close()
+
+message = f"Processed {len(Ds)} particles. Mean D: {np.mean(Ds):.4f} μm²/s"
+
+(svg, message)
+                `);
+
+                document.getElementById('plot').innerHTML = svg;
+                document.getElementById('output').innerText = message;
+            } catch (error) {
+                document.getElementById('output').innerText = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
