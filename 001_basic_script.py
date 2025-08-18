@@ -7,4 +7,5 @@ from io import BytesIO
 import warnings
 warnings.filterwarnings('ignore')
 
+print(tp.__version__)
 print("hello")
