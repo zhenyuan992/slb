@@ -1,0 +1,6 @@
+trackpy==0.7
+nd2==0.10.3
+matplotlib
+scipy==1.16.1
+numpy==2.0.2
+pandas==2.2.2
