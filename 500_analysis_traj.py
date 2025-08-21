@@ -71,11 +71,23 @@ traj = tp.link_df(loc, search_range=search_range, memory=memory)
 # Optional: drop very short tracks
 traj = tp.filter_stubs(traj, threshold=5)  # keep tracks with ≥5 points
 traj.index = traj.index.rename('frame_idx')
+df = traj.sort_values(['particle','frame']).copy()
+groups = df.groupby('particle', sort=True)
 #%%time
 fig,axx=plt.subplots(2,1,figsize=(15,6),dpi=200)
 axx[0].imshow(np.clip(np.stack([gray1[0],gray1[-1],gray1[-1]*0],axis=-1)/20-1,0,1),interpolation="none",vmax=20)
-axx[0].set_title("tracked particles (R is before, G is after)")
+axx[0].set_title("Tracked particles (Red: before, Green: after)")
+axx[0].set_xlabel("X position (pixels)")
+axx[0].set_ylabel("Y position (pixels)")
 ax=axx[1]
 ax.imshow(gray1[0],origin="upper",interpolation="none",vmax=50)
 for i, (pid, g) in enumerate(groups):
     ax.plot(g['x'].values, g['y'].values, '-', lw=1,c="w")
+ax.set_title("Particle trajectories over first frame")
+ax.set_xlabel("X position (pixels)")
+ax.set_ylabel("Y position (pixels)")
+
+# Save and close
+plt.tight_layout()
+plt.savefig("particle_tracking_results.png", dpi=200, bbox_inches="tight")
+plt.close(fig)
